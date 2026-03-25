@@ -1,0 +1,56 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  main:
+    web-application-type: reactive
+
+  cloud:
+    gateway:
+      routes:
+        - id: auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/gateway/auth/**
+          filters:
+            - StripPrefix=1
+
+        - id: delivery-service
+          uri: lb://delivery-service
+          predicates:
+            - Path=/gateway/deliveries/**
+          filters:
+            - StripPrefix=1
+            - name: JwtAuthFilter
+
+        - id: tracking-service
+          uri: lb://tracking-service
+          predicates:
+            - Path=/gateway/tracking/**
+          filters:
+            - StripPrefix=1
+            - name: JwtAuthFilter
+
+        - id: admin-service
+          uri: lb://admin-service
+          predicates:
+            - Path=/gateway/admin/**
+          filters:
+            - StripPrefix=1
+            - name: JwtAuthFilter
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+
+jwt:
+  secret: SmartCourierSuperSecretKey2025SmartCourierSuperSecretKey2025==
+  public-paths: /gateway/auth/signup,/gateway/auth/login
+
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO
+    com.smartcourier.gateway: DEBUG

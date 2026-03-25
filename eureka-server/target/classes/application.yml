@@ -1,0 +1,38 @@
+# ============================================================
+# SmartCourier - Eureka Server Configuration
+# Port: 8761 | Service Registry for all microservices
+# Dashboard: http://localhost:8761
+# ============================================================
+
+server:
+  port: 8761
+
+spring:
+  application:
+    name: eureka-server
+
+eureka:
+  instance:
+    hostname: localhost
+
+  client:
+    # Eureka Server does NOT register itself with Eureka
+    # It IS the registry — no need to register with itself
+    register-with-eureka: false
+
+    # Eureka Server does NOT fetch registry from another Eureka
+    # It IS the source of truth
+    fetch-registry: false
+
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+
+  server:
+    # Wait time before evicting unregistered services (ms)
+    # Lower value = faster detection of down services
+    eviction-interval-timer-in-ms: 5000
+
+logging:
+  level:
+    com.netflix.eureka: INFO
+    com.netflix.discovery: INFO
