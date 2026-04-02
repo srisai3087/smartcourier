@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TrackingEvent.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">tracking-service</a> &gt; <a href="index.source.html" class="el_package">com.smartcourier.tracking.entity</a> &gt; <span class="el_source">TrackingEvent.java</span></div><h1>TrackingEvent.java</h1><pre class="source lang-java linenums">package com.smartcourier.tracking.entity;
+
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+import org.hibernate.annotations.CreationTimestamp;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = &quot;tracking_events&quot;, indexes = {
+        @Index(name = &quot;idx_tracking_number&quot;, columnList = &quot;tracking_number&quot;)
+})
+@Getter
+@Setter
+<span class="nc" id="L15">public class TrackingEvent {</span>
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = &quot;delivery_id&quot;, nullable = false)
+    private Long deliveryId;
+
+    @Column(name = &quot;tracking_number&quot;, nullable = false)
+    private String trackingNumber;
+
+    @Column(name = &quot;event_type&quot;, nullable = false)
+    private String eventType;
+
+    @Column(name = &quot;location&quot;)
+    private String location;
+
+    @Column(name = &quot;remarks&quot;)
+    private String remarks;
+
+    @Column(name = &quot;event_time&quot;, nullable = false)
+    private LocalDateTime eventTime;
+
+    @Column(name = &quot;created_by&quot;)
+    private Long createdBy;
+
+    @CreationTimestamp
+    @Column(name = &quot;created_at&quot;)
+    private LocalDateTime createdAt;
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

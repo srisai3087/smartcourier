@@ -1,0 +1,112 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+
+  main:
+    web-application-type: reactive
+
+  cloud:
+    gateway:
+      routes:
+
+        # ================= AUTH SWAGGER (FIRST) =================
+        - id: auth-swagger
+          uri: lb://AUTH-SERVICE
+          predicates:
+            - Path=/gateway/auth/v3/api-docs,/gateway/auth/swagger-ui/**,/gateway/auth/swagger-ui.html
+          filters:
+            - StripPrefix=1
+
+        # ================= DELIVERY SWAGGER =================
+        - id: delivery-swagger
+          uri: lb://DELIVERY-SERVICE
+          predicates:
+            - Path=/gateway/deliveries/v3/api-docs,/gateway/deliveries/swagger-ui/**,/gateway/deliveries/swagger-ui.html
+          filters:
+            - StripPrefix=1
+
+        # ================= AUTH SERVICE =================
+        - id: auth-service
+          uri: lb://AUTH-SERVICE
+          predicates:
+            - Path=/gateway/auth/**
+          filters:
+            - StripPrefix=1
+
+        # ================= DELIVERY SERVICE =================
+        - id: delivery-service
+          uri: lb://DELIVERY-SERVICE
+          predicates:
+            - Path=/gateway/deliveries/**
+          filters:
+            - StripPrefix=1
+            - name: JwtAuthFilter
+
+        # ================= TRACKING SERVICE =================
+        - id: tracking-service
+          uri: lb://TRACKING-SERVICE
+          predicates:
+            - Path=/gateway/tracking/**
+          filters:
+            - StripPrefix=1
+            - name: JwtAuthFilter
+
+        # ================= ADMIN SERVICE =================
+        - id: admin-service
+          uri: lb://ADMIN-SERVICE
+          predicates:
+            - Path=/gateway/admin/**
+          filters:
+            - StripPrefix=1
+            - name: JwtAuthFilter
+
+      # ✅ ADD THIS (CORS CONFIG)
+      globalcors:
+        corsConfigurations:
+          '[/**]':
+            allowedOrigins:
+              - "http://localhost:3000"
+              - "http://localhost:3001"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders: "*"
+            allowCredentials: true
+
+
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials
+
+#eureka:
+#  client:
+#    service-url:
+#      defaultZone: http://eureka-server:8761/eureka/
+
+eureka:
+  client:
+    service-url:
+      defaultZone=http://localhost:8761/eureka/:
+
+
+
+jwt:
+  secret: SmartCourierSuperSecretKey2025SmartCourierSuperSecretKey2025==
+
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO
+    com.smartcourier.gateway: DEBUG
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://localhost:9411/api/v2/spans

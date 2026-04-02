@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TrackingServiceable.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">tracking-service</a> &gt; <a href="index.source.html" class="el_package">com.smartcourier.tracking.serviceimpl</a> &gt; <span class="el_source">TrackingServiceable.java</span></div><h1>TrackingServiceable.java</h1><pre class="source lang-java linenums">package com.smartcourier.tracking.serviceimpl;
+
+import com.smartcourier.tracking.client.DeliveryServiceClient;
+import com.smartcourier.tracking.dto.ProofResponse;
+import com.smartcourier.tracking.dto.TrackingEventRequest;
+import com.smartcourier.tracking.dto.TrackingResponse;
+import com.smartcourier.tracking.entity.DeliveryProof;
+import com.smartcourier.tracking.entity.Document;
+import com.smartcourier.tracking.entity.TrackingEvent;
+import com.smartcourier.tracking.exception.ResourceNotFoundException;
+import com.smartcourier.tracking.repository.DeliveryProofRepository;
+import com.smartcourier.tracking.repository.DocumentRepository;
+import com.smartcourier.tracking.repository.TrackingEventRepository;
+import com.smartcourier.tracking.service.TrackingService;
+import feign.FeignException;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.modelmapper.ModelMapper;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+<span class="nc" id="L33">@Slf4j</span>
+@RequiredArgsConstructor
+public class TrackingServiceable implements TrackingService {
+
+    private final TrackingEventRepository eventRepository;
+    private final DocumentRepository documentRepository;
+    private final DeliveryProofRepository proofRepository;
+    private final DeliveryServiceClient deliveryServiceClient;
+    private final ModelMapper modelMapper;
+
+    @Value(&quot;${file.upload-dir}&quot;)
+    private String uploadDir;
+
+    @Override
+    public TrackingResponse getTrackingByNumber(String trackingNumber) {
+<span class="nc" id="L48">        List&lt;TrackingEvent&gt; events = eventRepository.findByTrackingNumberOrderByEventTimeDesc(trackingNumber);</span>
+<span class="nc bnc" id="L49" title="All 2 branches missed.">        if (events.isEmpty()) {</span>
+<span class="nc" id="L50">            throw new ResourceNotFoundException(&quot;No tracking events found for: &quot; + trackingNumber);</span>
+        }
+<span class="nc" id="L52">        List&lt;TrackingResponse.EventDTO&gt; dtos = events.stream()</span>
+<span class="nc" id="L53">                .map(e -&gt; modelMapper.map(e, TrackingResponse.EventDTO.class))</span>
+<span class="nc" id="L54">                .collect(Collectors.toList());</span>
+<span class="nc" id="L55">        return TrackingResponse.builder()</span>
+<span class="nc" id="L56">                .trackingNumber(trackingNumber)</span>
+<span class="nc" id="L57">                .deliveryId(events.get(0).getDeliveryId())</span>
+<span class="nc" id="L58">                .events(dtos)</span>
+<span class="nc" id="L59">                .build();</span>
+    }
+
+    @Override
+    @Transactional
+    public TrackingResponse.EventDTO addEvent(TrackingEventRequest req, Long adminId) {
+        try {
+<span class="nc" id="L66">            deliveryServiceClient.getDeliveryById(req.getDeliveryId());</span>
+<span class="nc" id="L67">            log.info(&quot;Delivery {} verified via Feign&quot;, req.getDeliveryId());</span>
+<span class="nc" id="L68">        } catch (FeignException.NotFound e) {</span>
+<span class="nc" id="L69">            throw new ResourceNotFoundException(&quot;Delivery not found with id: &quot; + req.getDeliveryId());</span>
+<span class="nc" id="L70">        } catch (Exception e) {</span>
+<span class="nc" id="L71">            log.warn(&quot;Could not verify delivery via Feign: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L72">        }</span>
+
+<span class="nc" id="L74">        TrackingEvent event = new TrackingEvent();</span>
+<span class="nc" id="L75">        event.setDeliveryId(req.getDeliveryId());</span>
+<span class="nc" id="L76">        event.setTrackingNumber(req.getTrackingNumber());</span>
+<span class="nc" id="L77">        event.setEventType(req.getEventType());</span>
+<span class="nc" id="L78">        event.setLocation(req.getLocation());</span>
+<span class="nc" id="L79">        event.setRemarks(req.getRemarks());</span>
+<span class="nc" id="L80">        event.setEventTime(req.getEventTime());</span>
+<span class="nc bnc" id="L81" title="All 2 branches missed.">        event.setCreatedBy(adminId != null ? adminId : 0L);</span>
+
+<span class="nc" id="L83">        TrackingEvent saved = eventRepository.save(event);</span>
+<span class="nc" id="L84">        log.info(&quot;Tracking event '{}' added for: {}&quot;, req.getEventType(), req.getTrackingNumber());</span>
+<span class="nc" id="L85">        return modelMapper.map(saved, TrackingResponse.EventDTO.class);</span>
+    }
+
+    @Override
+    @Transactional
+    public String uploadDocument(Long deliveryId, String documentType, MultipartFile file) {
+        try {
+<span class="nc" id="L92">            Path dir = Paths.get(uploadDir, deliveryId.toString());</span>
+<span class="nc" id="L93">            Files.createDirectories(dir);</span>
+<span class="nc" id="L94">            Path filePath = dir.resolve(file.getOriginalFilename());</span>
+<span class="nc" id="L95">            Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);</span>
+
+<span class="nc" id="L97">            Document doc = Document.builder()</span>
+<span class="nc" id="L98">                    .deliveryId(deliveryId)</span>
+<span class="nc" id="L99">                    .documentType(documentType.toUpperCase())</span>
+<span class="nc" id="L100">                    .fileName(file.getOriginalFilename())</span>
+<span class="nc" id="L101">                    .storagePath(filePath.toString())</span>
+<span class="nc" id="L102">                    .fileSizeBytes(file.getSize())</span>
+<span class="nc" id="L103">                    .build();</span>
+<span class="nc" id="L104">            documentRepository.save(doc);</span>
+<span class="nc" id="L105">            log.info(&quot;Document '{}' uploaded for deliveryId={}&quot;, file.getOriginalFilename(), deliveryId);</span>
+<span class="nc" id="L106">            return filePath.toString();</span>
+<span class="nc" id="L107">        } catch (IOException e) {</span>
+<span class="nc" id="L108">            throw new RuntimeException(&quot;Failed to store file: &quot; + e.getMessage());</span>
+        }
+    }
+
+    @Override
+    public ProofResponse getProof(Long deliveryId) {
+
+<span class="nc" id="L115">        List&lt;Document&gt; docs = documentRepository.findByDeliveryId(deliveryId);</span>
+
+<span class="nc bnc" id="L117" title="All 2 branches missed.">        if (docs.isEmpty()) {</span>
+<span class="nc" id="L118">            throw new ResourceNotFoundException(</span>
+                    &quot;No documents found for deliveryId: &quot; + deliveryId);
+        }
+
+<span class="nc" id="L122">        Document doc = docs.get(0);</span>
+
+<span class="nc" id="L124">        ProofResponse response = new ProofResponse();</span>
+
+<span class="nc" id="L126">        response.setDeliveryId(deliveryId);</span>
+<span class="nc" id="L127">        response.setPhotoPath(doc.getStoragePath());</span>
+<span class="nc" id="L128">        response.setRemarks(&quot;Document uploaded&quot;);</span>
+
+<span class="nc" id="L130">        return response;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

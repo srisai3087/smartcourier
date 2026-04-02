@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DeliveryController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">delivery-service</a> &gt; <a href="index.source.html" class="el_package">com.smartcourier.delivery.controller</a> &gt; <span class="el_source">DeliveryController.java</span></div><h1>DeliveryController.java</h1><pre class="source lang-java linenums">package com.smartcourier.delivery.controller;
+
+import com.smartcourier.delivery.dto.CreateDeliveryRequest;
+import com.smartcourier.delivery.dto.DeliveryResponse;
+import com.smartcourier.delivery.enums.DeliveryStatus;
+import com.smartcourier.delivery.service.DeliveryService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping(&quot;/deliveries&quot;)
+@RequiredArgsConstructor
+public class DeliveryController {
+
+    private final DeliveryService deliveryService;
+
+    // CUSTOMER and ADMIN both can create delivery
+    @PreAuthorize(&quot;hasAnyAuthority('ROLE_CUSTOMER', 'ROLE_ADMIN')&quot;)
+    @PostMapping
+    public ResponseEntity&lt;DeliveryResponse&gt; createDelivery(
+            @RequestBody CreateDeliveryRequest request,
+            @RequestHeader(&quot;X-User-Id&quot;) Long customerId) {
+<span class="nc" id="L30">        return ResponseEntity.status(HttpStatus.CREATED)</span>
+<span class="nc" id="L31">                .body(deliveryService.createDelivery(request, customerId));</span>
+    }
+
+    // CUSTOMER sees only their own deliveries
+    @PreAuthorize(&quot;hasAnyAuthority('ROLE_CUSTOMER', 'ROLE_ADMIN')&quot;)
+    @GetMapping(&quot;/my&quot;)
+    public ResponseEntity&lt;List&lt;DeliveryResponse&gt;&gt; getMyDeliveries(
+            @RequestHeader(&quot;X-User-Id&quot;) Long customerId) {
+<span class="nc" id="L39">        return ResponseEntity.ok(deliveryService.getMyDeliveries(customerId));</span>
+    }
+
+    // Both can view single delivery
+    @PreAuthorize(&quot;hasAnyAuthority('ROLE_CUSTOMER', 'ROLE_ADMIN')&quot;)
+    @GetMapping(&quot;/{id}&quot;)
+    public ResponseEntity&lt;DeliveryResponse&gt; getDeliveryById(
+            @PathVariable Long id) {
+<span class="nc" id="L47">        return ResponseEntity.ok(deliveryService.getDeliveryById(id));</span>
+    }
+
+    // Both can track by number
+    @PreAuthorize(&quot;hasAnyAuthority('ROLE_CUSTOMER', 'ROLE_ADMIN')&quot;)
+    @GetMapping(&quot;/track/{trackingNumber}&quot;)
+    public ResponseEntity&lt;DeliveryResponse&gt; trackDelivery(
+            @PathVariable String trackingNumber) {
+<span class="nc" id="L55">        return ResponseEntity.ok(deliveryService.getDeliveryByTracking(trackingNumber));</span>
+    }
+
+    // ONLY ADMIN can update status
+    @PreAuthorize(&quot;hasAuthority('ROLE_ADMIN')&quot;)
+    @PatchMapping(&quot;/{id}/status&quot;)
+    public ResponseEntity&lt;DeliveryResponse&gt; updateStatus(
+            @PathVariable Long id,
+            @RequestParam DeliveryStatus status) {
+<span class="nc" id="L64">        return ResponseEntity.ok(deliveryService.updateStatus(id, status));</span>
+    }
+
+    // ONLY ADMIN can see all deliveries
+    @PreAuthorize(&quot;hasAuthority('ROLE_ADMIN')&quot;)
+    @GetMapping
+    public ResponseEntity&lt;Page&lt;DeliveryResponse&gt;&gt; getAllDeliveries(
+            Pageable pageable) {
+<span class="nc" id="L72">        return ResponseEntity.ok(deliveryService.getAllDeliveries(pageable));</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

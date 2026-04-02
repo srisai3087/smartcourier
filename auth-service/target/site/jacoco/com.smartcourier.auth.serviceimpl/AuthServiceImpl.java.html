@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AuthServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Auth Service</a> &gt; <a href="index.source.html" class="el_package">com.smartcourier.auth.serviceimpl</a> &gt; <span class="el_source">AuthServiceImpl.java</span></div><h1>AuthServiceImpl.java</h1><pre class="source lang-java linenums">package com.smartcourier.auth.serviceimpl;
+
+import com.smartcourier.auth.dto.AuthResponse;
+import com.smartcourier.auth.dto.LoginRequest;
+import com.smartcourier.auth.dto.SignupRequest;
+import com.smartcourier.auth.entity.Role;
+import com.smartcourier.auth.entity.User;
+import com.smartcourier.auth.exception.ResourceNotFoundException;
+import com.smartcourier.auth.repository.RoleRepository;
+import com.smartcourier.auth.repository.UserRepository;
+import com.smartcourier.auth.service.AuthService;
+import com.smartcourier.auth.service.JwtService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Set;
+import java.util.UUID;
+
+@Service
+<span class="fc" id="L24">@Slf4j</span>
+@RequiredArgsConstructor
+public class AuthServiceImpl implements AuthService {
+
+    private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
+
+    @Override
+    @Transactional
+    public AuthResponse signup(SignupRequest request) {
+
+<span class="fc" id="L37">        log.info(&quot;Registering user: {}&quot;, request.getEmail());</span>
+
+        //duplicate check
+<span class="fc bfc" id="L40" title="All 2 branches covered.">        if (userRepository.existsByEmail(request.getEmail())) {</span>
+<span class="fc" id="L41">            throw new IllegalArgumentException(&quot;Email already registered&quot;);</span>
+        }
+
+
+<span class="fc" id="L45">        String inputRole = request.getRole();</span>
+
+<span class="pc bpc" id="L47" title="1 of 2 branches missed.">        final String roleName = (inputRole == null ||</span>
+<span class="nc bnc" id="L48" title="All 4 branches missed.">                (!inputRole.equals(&quot;ROLE_ADMIN&quot;) &amp;&amp; !inputRole.equals(&quot;ROLE_CUSTOMER&quot;)))</span>
+<span class="fc" id="L49">                ? &quot;ROLE_CUSTOMER&quot;</span>
+<span class="pc" id="L50">                : inputRole;</span>
+
+<span class="fc" id="L52">        Role role = roleRepository.findByName(roleName)</span>
+<span class="pc" id="L53">                .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Role not found: &quot; + roleName));</span>
+
+        // create user
+<span class="fc" id="L56">        User user = User.builder()</span>
+<span class="fc" id="L57">                .fullName(request.getFullName())</span>
+<span class="fc" id="L58">                .email(request.getEmail())</span>
+<span class="fc" id="L59">                .password(passwordEncoder.encode(request.getPassword()))</span>
+<span class="fc" id="L60">                .phone(request.getPhone())</span>
+<span class="fc" id="L61">                .enabled(true)</span>
+<span class="fc" id="L62">                .roles(Set.of(role))</span>
+<span class="fc" id="L63">                .build();</span>
+
+<span class="fc" id="L65">        User savedUser = userRepository.save(user);</span>
+
+        // generate JWT
+<span class="fc" id="L68">        String token = jwtService.generateToken(</span>
+<span class="fc" id="L69">                savedUser.getId(),</span>
+<span class="fc" id="L70">                savedUser.getEmail(),</span>
+                roleName
+        );
+
+<span class="fc" id="L74">        return AuthResponse.builder()</span>
+<span class="fc" id="L75">                .accessToken(token)</span>
+<span class="fc" id="L76">                .refreshToken(UUID.randomUUID().toString())</span>
+<span class="fc" id="L77">                .role(roleName)</span>
+<span class="fc" id="L78">                .userId(savedUser.getId())</span>
+<span class="fc" id="L79">                .fullName(savedUser.getFullName())</span>
+<span class="fc" id="L80">                .build();</span>
+    }
+
+    @Override
+    public AuthResponse login(LoginRequest request) {
+
+<span class="fc" id="L86">        log.info(&quot;Login attempt: {}&quot;, request.getEmail());</span>
+
+<span class="fc" id="L88">        User user = userRepository.findByEmail(request.getEmail())</span>
+<span class="fc" id="L89">                .orElseThrow(() -&gt; new BadCredentialsException(&quot;Invalid email or password&quot;));</span>
+
+        // password check
+<span class="fc bfc" id="L92" title="All 2 branches covered.">        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {</span>
+<span class="fc" id="L93">            throw new BadCredentialsException(&quot;Invalid email or password&quot;);</span>
+        }
+
+<span class="pc bpc" id="L96" title="1 of 2 branches missed.">        if (!user.getEnabled()) {</span>
+<span class="nc" id="L97">            throw new BadCredentialsException(&quot;Account disabled&quot;);</span>
+        }
+
+        // get role
+<span class="fc" id="L101">        String role = user.getRoles().stream()</span>
+<span class="fc" id="L102">                .map(Role::getName)</span>
+<span class="fc" id="L103">                .findFirst()</span>
+<span class="fc" id="L104">                .orElse(&quot;ROLE_CUSTOMER&quot;);</span>
+
+<span class="fc" id="L106">        String token = jwtService.generateToken(</span>
+<span class="fc" id="L107">                user.getId(),</span>
+<span class="fc" id="L108">                user.getEmail(),</span>
+                role
+        );
+
+<span class="fc" id="L112">        return AuthResponse.builder()</span>
+<span class="fc" id="L113">                .accessToken(token)</span>
+<span class="fc" id="L114">                .refreshToken(UUID.randomUUID().toString())</span>
+<span class="fc" id="L115">                .role(role)</span>
+<span class="fc" id="L116">                .userId(user.getId())</span>
+<span class="fc" id="L117">                .fullName(user.getFullName())</span>
+<span class="fc" id="L118">                .build();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

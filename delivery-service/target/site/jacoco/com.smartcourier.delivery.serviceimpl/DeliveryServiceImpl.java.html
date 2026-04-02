@@ -1,0 +1,275 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DeliveryServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">delivery-service</a> &gt; <a href="index.source.html" class="el_package">com.smartcourier.delivery.serviceimpl</a> &gt; <span class="el_source">DeliveryServiceImpl.java</span></div><h1>DeliveryServiceImpl.java</h1><pre class="source lang-java linenums">package com.smartcourier.delivery.serviceimpl;
+
+import com.smartcourier.delivery.client.AdminClient;
+import com.smartcourier.delivery.client.TrackingServiceClient;
+import com.smartcourier.delivery.dto.CreateDeliveryRequest;
+import com.smartcourier.delivery.dto.DeliveryResponse;
+import com.smartcourier.delivery.dto.ExceptionCreateRequest;
+import com.smartcourier.delivery.dto.TrackingEventRequest;
+import com.smartcourier.delivery.entity.Address;
+import com.smartcourier.delivery.entity.Delivery;
+import com.smartcourier.delivery.entity.Package;
+import com.smartcourier.delivery.enums.DeliveryStatus;
+import com.smartcourier.delivery.exception.InvalidStatusTransitionException;
+import com.smartcourier.delivery.exception.ResourceNotFoundException;
+import com.smartcourier.delivery.producer.DeliveryEventProducer;
+import com.smartcourier.delivery.repository.DeliveryRepository;
+import com.smartcourier.delivery.service.DeliveryService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.modelmapper.ModelMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+@Service
+<span class="fc" id="L38">@Slf4j</span>
+@RequiredArgsConstructor
+public class DeliveryServiceImpl implements DeliveryService {
+
+    private final DeliveryRepository deliveryRepository;
+
+    private final ModelMapper modelMapper;
+
+    // Feign client — auto-calls tracking-service when status changes
+    private final TrackingServiceClient trackingServiceClient;
+
+    private final AdminClient adminClient;
+
+
+    private final DeliveryEventProducer producer;
+
+    @Value(&quot;${delivery.charges.domestic-rate}&quot;)
+    private double domesticRate;
+
+    @Value(&quot;${delivery.charges.express-rate}&quot;)
+    private double expressRate;
+
+    @Value(&quot;${delivery.charges.international-rate}&quot;)
+    private double internationalRate;
+
+    @Value(&quot;${delivery.charges.min-domestic}&quot;)
+    private double minDomestic;
+
+    @Value(&quot;${delivery.charges.min-express}&quot;)
+    private double minExpress;
+
+    @Value(&quot;${delivery.charges.min-international}&quot;)
+    private double minInternational;
+
+    @Value(&quot;${delivery.charges.dim-divisor}&quot;)
+    private double dimDivisor;
+
+    // Valid state transitions for the delivery lifecycle
+<span class="fc" id="L76">    private static final Map&lt;DeliveryStatus, Set&lt;DeliveryStatus&gt;&gt; VALID_TRANSITIONS = Map.of(</span>
+<span class="fc" id="L77">            DeliveryStatus.DRAFT,            Set.of(DeliveryStatus.BOOKED),</span>
+<span class="fc" id="L78">            DeliveryStatus.BOOKED,           Set.of(DeliveryStatus.PICKED_UP),</span>
+<span class="fc" id="L79">            DeliveryStatus.PICKED_UP,        Set.of(DeliveryStatus.IN_TRANSIT, DeliveryStatus.DELAYED, DeliveryStatus.FAILED),</span>
+<span class="fc" id="L80">            DeliveryStatus.IN_TRANSIT,       Set.of(DeliveryStatus.OUT_FOR_DELIVERY, DeliveryStatus.DELAYED, DeliveryStatus.FAILED),</span>
+<span class="fc" id="L81">            DeliveryStatus.OUT_FOR_DELIVERY, Set.of(DeliveryStatus.DELIVERED, DeliveryStatus.FAILED, DeliveryStatus.RETURNED),</span>
+<span class="fc" id="L82">            DeliveryStatus.DELIVERED,        Set.of(),</span>
+<span class="fc" id="L83">            DeliveryStatus.DELAYED,          Set.of(DeliveryStatus.IN_TRANSIT, DeliveryStatus.RETURNED),</span>
+<span class="fc" id="L84">            DeliveryStatus.FAILED,           Set.of(DeliveryStatus.RETURNED),</span>
+<span class="fc" id="L85">            DeliveryStatus.RETURNED,         Set.of()</span>
+    );
+
+    @Override
+    @Transactional
+    public DeliveryResponse createDelivery(CreateDeliveryRequest request, Long customerId) {
+<span class="fc" id="L91">        log.info(&quot;Creating delivery for customerId={}, serviceType={}&quot;, customerId, request.getServiceType());</span>
+
+<span class="fc" id="L93">        Address sender   = mapAddress(request.getSenderAddress());</span>
+<span class="fc" id="L94">        Address receiver = mapAddress(request.getReceiverAddress());</span>
+<span class="fc" id="L95">        Package pkg      = mapPackage(request.getPackageDetails());</span>
+<span class="fc" id="L96">        BigDecimal charge = calculateCharge(request.getServiceType(), pkg);</span>
+
+<span class="fc" id="L98">        Delivery delivery = Delivery.builder()</span>
+<span class="fc" id="L99">                .trackingNumber(generateTrackingNumber())</span>
+<span class="fc" id="L100">                .customerId(customerId)</span>
+<span class="fc" id="L101">                .status(DeliveryStatus.DRAFT)</span>
+<span class="fc" id="L102">                .serviceType(request.getServiceType().toUpperCase())</span>
+<span class="fc" id="L103">                .chargeAmount(charge)</span>
+<span class="fc" id="L104">                .scheduledPickup(request.getScheduledPickup())</span>
+<span class="fc" id="L105">                .senderAddress(sender)</span>
+<span class="fc" id="L106">                .receiverAddress(receiver)</span>
+<span class="fc" id="L107">                .parcelPackage(pkg)</span>
+<span class="fc" id="L108">                .build();</span>
+
+<span class="fc" id="L110">        Delivery saved = deliveryRepository.save(delivery);</span>
+
+        //  RabbitMQ event (SAFE ADDITION)
+        try {
+<span class="fc" id="L114">            producer.sendEvent(&quot;Delivery Created ID: &quot; + saved.getId());</span>
+<span class="fc" id="L115">            log.info(&quot;RabbitMQ event sent for deliveryId={}&quot;, saved.getId());</span>
+<span class="fc" id="L116">        } catch (Exception e) {</span>
+<span class="fc" id="L117">            log.warn(&quot;RabbitMQ not available: {}&quot;, e.getMessage());</span>
+<span class="fc" id="L118">        }</span>
+
+<span class="fc" id="L120">        log.info(&quot;Delivery created: trackingNumber={}&quot;, saved.getTrackingNumber());</span>
+<span class="fc" id="L121">        return toResponse(saved);</span>
+    }
+
+    @Override
+    public List&lt;DeliveryResponse&gt; getMyDeliveries(Long customerId) {
+<span class="fc" id="L126">        return deliveryRepository.findByCustomerIdOrderByCreatedAtDesc(customerId)</span>
+<span class="fc" id="L127">                .stream().map(this::toResponse).collect(Collectors.toList());</span>
+    }
+
+    @Override
+    public DeliveryResponse getDeliveryById(Long id) {
+<span class="fc" id="L132">        return toResponse(findById(id));</span>
+    }
+
+    @Override
+    public DeliveryResponse getDeliveryByTracking(String trackingNumber) {
+<span class="fc" id="L137">        Delivery delivery = deliveryRepository.findByTrackingNumber(trackingNumber)</span>
+<span class="fc" id="L138">                .orElseThrow(() -&gt; new ResourceNotFoundException(</span>
+                        &quot;Delivery not found with tracking number: &quot; + trackingNumber));
+<span class="fc" id="L140">        return toResponse(delivery);</span>
+    }
+
+    @Override
+    public Page&lt;DeliveryResponse&gt; getAllDeliveries(Pageable pageable) {
+<span class="fc" id="L145">        return deliveryRepository.findAll(pageable).map(this::toResponse);</span>
+    }
+
+    @Override
+    @Transactional
+    public DeliveryResponse updateStatus(Long id, DeliveryStatus newStatus) {
+<span class="fc" id="L151">        Delivery delivery = findById(id);</span>
+<span class="fc" id="L152">        DeliveryStatus previousStatus = delivery.getStatus();</span>
+
+<span class="fc" id="L154">        Set&lt;DeliveryStatus&gt; allowed = VALID_TRANSITIONS.getOrDefault(previousStatus, Set.of());</span>
+<span class="fc bfc" id="L155" title="All 2 branches covered.">        if (!allowed.contains(newStatus)) {</span>
+<span class="fc" id="L156">            throw new InvalidStatusTransitionException(</span>
+<span class="fc" id="L157">                    String.format(&quot;Cannot transition from %s to %s&quot;, previousStatus, newStatus));</span>
+        }
+
+        // Update status
+<span class="fc" id="L161">        delivery.setStatus(newStatus);</span>
+<span class="fc" id="L162">        Delivery saved = deliveryRepository.save(delivery);</span>
+
+<span class="fc" id="L164">        log.info(&quot;Delivery {} status: {} -&gt; {}&quot;, id, previousStatus, newStatus);</span>
+
+<span class="fc" id="L166">        autoCreateTrackingEvent(saved, previousStatus, newStatus);</span>
+
+
+        // AUTO EXCEPTION CREATION (ADD THIS BLOCK)
+<span class="fc bfc" id="L170" title="All 4 branches covered.">        if (newStatus == DeliveryStatus.FAILED || newStatus == DeliveryStatus.DELAYED) {</span>
+            try {
+<span class="fc" id="L172">                ExceptionCreateRequest req = new ExceptionCreateRequest();</span>
+<span class="fc" id="L173">                req.setDeliveryId(saved.getId());</span>
+<span class="fc" id="L174">                req.setExceptionType(newStatus.name());</span>
+<span class="fc" id="L175">                req.setReason(&quot;Auto-generated due to delivery issue&quot;);</span>
+
+<span class="fc" id="L177">                adminClient.createException(req);</span>
+
+<span class="fc" id="L179">                log.info(&quot;Exception created for deliveryId={}&quot;, saved.getId());</span>
+<span class="fc" id="L180">            } catch (Exception e) {</span>
+<span class="fc" id="L181">                log.warn(&quot;Failed to create exception: {}&quot;, e.getMessage());</span>
+<span class="fc" id="L182">            }</span>
+        }
+<span class="fc" id="L184">        return toResponse(saved);</span>
+    }
+
+    private void autoCreateTrackingEvent(Delivery delivery, DeliveryStatus from, DeliveryStatus to) {
+        try {
+<span class="fc" id="L189">            TrackingEventRequest event = TrackingEventRequest.builder()</span>
+<span class="fc" id="L190">                    .deliveryId(delivery.getId())</span>
+<span class="fc" id="L191">                    .trackingNumber(delivery.getTrackingNumber())</span>
+<span class="fc" id="L192">                    .eventType(to.name())</span>
+<span class="fc" id="L193">                    .location(&quot;Mumbai Central Hub&quot;)</span>
+<span class="fc" id="L194">                    .remarks(&quot;Status changed: &quot; + from.name() + &quot; -&gt; &quot; + to.name())</span>
+<span class="fc" id="L195">                    .eventTime(LocalDateTime.now())</span>
+<span class="fc" id="L196">                    .build();</span>
+<span class="fc" id="L197">            trackingServiceClient.addEvent(event);</span>
+<span class="fc" id="L198">            log.info(&quot;Tracking event sent via Feign: deliveryId={}, event={}&quot;, delivery.getId(), to.name());</span>
+<span class="nc" id="L199">        } catch (Exception e) {</span>
+<span class="nc" id="L200">            log.warn(&quot;Could not push tracking event (tracking-service may be down): {}&quot;, e.getMessage());</span>
+<span class="fc" id="L201">        }</span>
+<span class="fc" id="L202">    }</span>
+
+    private BigDecimal calculateCharge(String serviceType, Package pkg) {
+<span class="fc" id="L205">        double actual     = pkg.getWeightKg();</span>
+<span class="fc" id="L206">        double volumetric = 0;</span>
+
+<span class="pc bpc" id="L208" title="2 of 6 branches missed.">        if (pkg.getLengthCm() != null &amp;&amp; pkg.getWidthCm() != null &amp;&amp; pkg.getHeightCm() != null) {</span>
+<span class="fc" id="L209">            volumetric = (pkg.getLengthCm() * pkg.getWidthCm() * pkg.getHeightCm()) / dimDivisor;</span>
+        }
+
+<span class="fc" id="L212">        double billable = Math.max(actual, volumetric);</span>
+        double rate, minimum;
+
+<span class="pc bpc" id="L215" title="1 of 3 branches missed.">        switch (serviceType.toUpperCase()) {</span>
+            case &quot;EXPRESS&quot;:
+<span class="fc" id="L217">                rate = expressRate; minimum = minExpress; break;</span>
+            case &quot;INTERNATIONAL&quot;:
+<span class="nc" id="L219">                rate = internationalRate; minimum = minInternational; break;</span>
+            default:
+<span class="fc" id="L221">                rate = domesticRate; minimum = minDomestic;</span>
+        }
+
+<span class="fc" id="L224">        double charge = Math.max(billable * rate, minimum);</span>
+<span class="fc" id="L225">        return BigDecimal.valueOf(charge).setScale(2, RoundingMode.HALF_UP);</span>
+    }
+
+    private String generateTrackingNumber() {
+<span class="fc" id="L229">        return &quot;SC-&quot; + UUID.randomUUID().toString().toUpperCase().substring(0, 10);</span>
+    }
+
+    private Delivery findById(Long id) {
+<span class="fc" id="L233">        return deliveryRepository.findById(id)</span>
+<span class="fc" id="L234">                .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Delivery not found with id: &quot; + id));</span>
+    }
+
+    private Address mapAddress(CreateDeliveryRequest.AddressRequest dto) {
+<span class="fc" id="L238">        return modelMapper.map(dto, Address.class);</span>
+    }
+
+    private Package mapPackage(CreateDeliveryRequest.PackageRequest dto) {
+<span class="fc" id="L242">        Package pkg = modelMapper.map(dto, Package.class);</span>
+<span class="pc bpc" id="L243" title="1 of 2 branches missed.">        if (pkg.getIsFragile() == null) pkg.setIsFragile(false);</span>
+<span class="fc" id="L244">        return pkg;</span>
+    }
+
+    private DeliveryResponse toResponse(Delivery d) {
+
+<span class="fc" id="L249">        DeliveryResponse response = new DeliveryResponse();</span>
+
+        // SAFE mapping
+<span class="fc" id="L252">        modelMapper.map(d, response);</span>
+
+<span class="pc bpc" id="L254" title="1 of 2 branches missed.">        if (d.getSenderAddress() != null) {</span>
+<span class="fc" id="L255">            response.setSenderCity(d.getSenderAddress().getCity());</span>
+<span class="fc" id="L256">            response.setSenderState(d.getSenderAddress().getState());</span>
+        }
+
+<span class="pc bpc" id="L259" title="1 of 2 branches missed.">        if (d.getReceiverAddress() != null) {</span>
+<span class="fc" id="L260">            response.setReceiverCity(d.getReceiverAddress().getCity());</span>
+<span class="fc" id="L261">            response.setReceiverState(d.getReceiverAddress().getState());</span>
+<span class="fc" id="L262">            response.setReceiverName(d.getReceiverAddress().getFullName());</span>
+        }
+
+<span class="pc bpc" id="L265" title="1 of 2 branches missed.">        if (d.getParcelPackage() != null) {</span>
+<span class="fc" id="L266">            response.setWeightKg(d.getParcelPackage().getWeightKg());</span>
+<span class="fc" id="L267">            response.setIsFragile(d.getParcelPackage().getIsFragile());</span>
+        }
+
+<span class="fc" id="L270">        return response;</span>
+    }
+
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

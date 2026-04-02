@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AdminController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">admin-service</a> &gt; <a href="index.source.html" class="el_package">com.smartcourier.admin.controller</a> &gt; <span class="el_source">AdminController.java</span></div><h1>AdminController.java</h1><pre class="source lang-java linenums">package com.smartcourier.admin.controller;
+
+import com.smartcourier.admin.dto.*;
+import com.smartcourier.admin.entity.ExceptionLog;
+import com.smartcourier.admin.entity.Hub;
+import com.smartcourier.admin.service.AdminService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping(&quot;/admin&quot;)
+@RequiredArgsConstructor
+public class AdminController {
+
+    private final AdminService adminService;
+
+    // All admin endpoints — ROLE_ADMIN only
+    // If CUSTOMER tries to call any of these → 403 Forbidden
+
+    @PreAuthorize(&quot;hasAuthority('ROLE_ADMIN')&quot;)
+    @GetMapping(&quot;/dashboard&quot;)
+    public ResponseEntity&lt;DashboardResponse&gt; getDashboard() {
+<span class="nc" id="L28">        return ResponseEntity.ok(adminService.getDashboard());</span>
+    }
+
+    @PreAuthorize(&quot;hasAuthority('ROLE_ADMIN')&quot;)
+    @PutMapping(&quot;/deliveries/{id}/resolve&quot;)
+    public ResponseEntity&lt;ExceptionLog&gt; resolveException(
+            @PathVariable Long id,
+            @RequestBody ExceptionResolutionRequest request,
+            @RequestHeader(&quot;X-User-Id&quot;) Long adminId) {
+<span class="nc" id="L37">        return ResponseEntity.ok(</span>
+<span class="nc" id="L38">                adminService.resolveException(id, request, adminId));</span>
+    }
+
+    @PreAuthorize(&quot;hasAuthority('ROLE_ADMIN')&quot;)
+    @GetMapping(&quot;/reports&quot;)
+    public ResponseEntity&lt;List&lt;ReportDTO&gt;&gt; getReports() {
+<span class="nc" id="L44">        return ResponseEntity.ok(adminService.getReports());</span>
+    }
+
+    @PreAuthorize(&quot;hasAuthority('ROLE_ADMIN')&quot;)
+    @PostMapping(&quot;/reports/generate&quot;)
+    public ResponseEntity&lt;ReportDTO&gt; generateReport() {
+<span class="nc" id="L50">        return ResponseEntity.status(HttpStatus.CREATED)</span>
+<span class="nc" id="L51">                .body(adminService.generateReport());</span>
+    }
+
+    @PreAuthorize(&quot;hasAuthority('ROLE_ADMIN')&quot;)
+    @GetMapping(&quot;/hubs&quot;)
+    public ResponseEntity&lt;List&lt;Hub&gt;&gt; getAllHubs() {
+<span class="nc" id="L57">        return ResponseEntity.ok(adminService.getAllHubs());</span>
+    }
+
+    @PreAuthorize(&quot;hasAuthority('ROLE_ADMIN')&quot;)
+    @PostMapping(&quot;/hubs&quot;)
+    public ResponseEntity&lt;Hub&gt; createHub(
+            @RequestBody HubRequest request) {
+<span class="nc" id="L64">        return ResponseEntity.status(HttpStatus.CREATED)</span>
+<span class="nc" id="L65">                .body(adminService.createHub(request));</span>
+    }
+
+    @PreAuthorize(&quot;hasAuthority('ROLE_ADMIN')&quot;)
+    @PutMapping(&quot;/hubs/{id}&quot;)
+    public ResponseEntity&lt;Hub&gt; updateHub(
+            @PathVariable Long id,
+            @RequestBody HubRequest request) {
+<span class="nc" id="L73">        return ResponseEntity.ok(adminService.updateHub(id, request));</span>
+    }
+
+    @PreAuthorize(&quot;hasAuthority('ROLE_ADMIN')&quot;)
+    @GetMapping(&quot;/exceptions&quot;)
+    public ResponseEntity&lt;List&lt;ExceptionLogDTO&gt;&gt; getAllExceptions() {
+<span class="nc" id="L79">        return ResponseEntity.ok(adminService.getAllExceptions());</span>
+    }
+
+    @PreAuthorize(&quot;permitAll()&quot;)
+    @PostMapping(&quot;/exceptions&quot;)
+    public ResponseEntity&lt;ExceptionLog&gt; createException(
+            @RequestBody ExceptionCreateRequest request) {
+
+<span class="nc" id="L87">        return ResponseEntity.status(HttpStatus.CREATED)</span>
+<span class="nc" id="L88">                .body(adminService.createException(request));</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

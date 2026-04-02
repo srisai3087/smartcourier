@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TrackingController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">tracking-service</a> &gt; <a href="index.source.html" class="el_package">com.smartcourier.tracking.controller</a> &gt; <span class="el_source">TrackingController.java</span></div><h1>TrackingController.java</h1><pre class="source lang-java linenums">package com.smartcourier.tracking.controller;
+
+import com.smartcourier.tracking.dto.TrackingEventRequest;
+import com.smartcourier.tracking.dto.TrackingResponse;
+import com.smartcourier.tracking.service.TrackingService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+@RestController
+@RequestMapping(&quot;/tracking&quot;)
+@RequiredArgsConstructor
+public class TrackingController {
+
+    private final TrackingService trackingService;
+
+
+    // for getting all trackig history
+    @PreAuthorize(&quot;hasAnyAuthority('ROLE_CUSTOMER', 'ROLE_ADMIN')&quot;)
+    @GetMapping(&quot;/{trackingNumber}&quot;)
+    public ResponseEntity&lt;TrackingResponse&gt; getTracking(
+            @PathVariable String trackingNumber) {
+<span class="nc" id="L26">        return ResponseEntity.ok(</span>
+<span class="nc" id="L27">                trackingService.getTrackingByNumber(trackingNumber));</span>
+    }
+
+
+    //creating manual event if not listed
+    @PreAuthorize(&quot;hasAuthority('ROLE_ADMIN')&quot;)
+    @PostMapping(&quot;/events&quot;)
+    public ResponseEntity&lt;?&gt; addEvent(
+            @RequestBody TrackingEventRequest request,
+            @RequestHeader(value = &quot;X-User-Id&quot;, defaultValue = &quot;0&quot;) Long adminId) {
+<span class="nc" id="L37">        return ResponseEntity.status(HttpStatus.CREATED)</span>
+<span class="nc" id="L38">                .body(trackingService.addEvent(request, adminId));</span>
+    }
+
+
+
+    //upload proof
+    @PreAuthorize(&quot;hasAnyAuthority('ROLE_CUSTOMER', 'ROLE_ADMIN')&quot;)
+    @PostMapping(&quot;/documents/upload&quot;)
+    public ResponseEntity&lt;String&gt; uploadDocument(
+            @RequestParam Long deliveryId,
+            @RequestParam String documentType,
+            @RequestParam MultipartFile file) {
+<span class="nc" id="L50">        return ResponseEntity.status(HttpStatus.CREATED)</span>
+<span class="nc" id="L51">                .body(trackingService.uploadDocument(</span>
+                        deliveryId, documentType, file));
+    }
+
+    //get proof
+    @PreAuthorize(&quot;hasAnyAuthority('ROLE_CUSTOMER', 'ROLE_ADMIN')&quot;)
+    @GetMapping(&quot;/{deliveryId}/proof&quot;)
+    public ResponseEntity&lt;?&gt; getProof(
+            @PathVariable Long deliveryId) {
+<span class="nc" id="L60">        return ResponseEntity.ok(trackingService.getProof(deliveryId));</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

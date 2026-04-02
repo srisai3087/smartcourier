@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AdminServiceImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">admin-service</a> &gt; <a href="index.source.html" class="el_package">com.smartcourier.admin.serviceimpl</a> &gt; <span class="el_source">AdminServiceImpl.java</span></div><h1>AdminServiceImpl.java</h1><pre class="source lang-java linenums">package com.smartcourier.admin.serviceimpl;
+
+import com.smartcourier.admin.client.DeliveryServiceClient;
+import com.smartcourier.admin.dto.*;
+import com.smartcourier.admin.entity.ExceptionLog;
+import com.smartcourier.admin.entity.Hub;
+import com.smartcourier.admin.entity.Report;
+import com.smartcourier.admin.exception.ResourceNotFoundException;
+import com.smartcourier.admin.repository.ExceptionLogRepository;
+import com.smartcourier.admin.repository.HubRepository;
+import com.smartcourier.admin.repository.ReportRepository;
+import com.smartcourier.admin.service.AdminService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.modelmapper.ModelMapper;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Service
+<span class="nc" id="L26">@Slf4j</span>
+@RequiredArgsConstructor
+public class AdminServiceImpl implements AdminService {
+
+    private final ExceptionLogRepository exceptionLogRepository;
+    private final HubRepository hubRepository;
+    private final ReportRepository reportRepository;
+    private final DeliveryServiceClient deliveryServiceClient;
+    private final ModelMapper modelMapper;
+
+    @Override
+    public DashboardResponse getDashboard() {
+
+<span class="nc" id="L39">        long unresolved = exceptionLogRepository.countByResolvedByIsNull();</span>
+<span class="nc" id="L40">        long totalHubs  = hubRepository.countByIsActiveTrue();</span>
+
+<span class="nc" id="L42">        long total = 0;</span>
+<span class="nc" id="L43">        long delivered = 0;</span>
+<span class="nc" id="L44">        long failed = 0;</span>
+<span class="nc" id="L45">        long delayed = 0;</span>
+<span class="nc" id="L46">        long pending = 0;</span>
+
+        try {
+            // ✅ Feign call (UPDATED)
+<span class="nc" id="L50">            PageResponse&lt;DeliveryDTO&gt; page =</span>
+<span class="nc" id="L51">                    deliveryServiceClient.getAllDeliveries(0, 100);</span>
+
+<span class="nc" id="L53">            total = page.getTotalElements();</span>
+
+<span class="nc bnc" id="L55" title="All 2 branches missed.">            for (DeliveryDTO d : page.getContent()) {</span>
+
+<span class="nc" id="L57">                String status = d.getStatus();</span>
+
+<span class="nc bnc" id="L59" title="All 2 branches missed.">                if (&quot;DELIVERED&quot;.equals(status)) delivered++;</span>
+<span class="nc bnc" id="L60" title="All 2 branches missed.">                else if (&quot;FAILED&quot;.equals(status)) failed++;</span>
+<span class="nc bnc" id="L61" title="All 2 branches missed.">                else if (&quot;DELAYED&quot;.equals(status)) delayed++;</span>
+<span class="nc" id="L62">                else pending++;</span>
+<span class="nc" id="L63">            }</span>
+
+<span class="nc" id="L65">        } catch (Exception e) {</span>
+<span class="nc" id="L66">            log.warn(&quot;Error fetching delivery data: {}&quot;, e.getMessage());</span>
+<span class="nc" id="L67">        }</span>
+
+<span class="nc" id="L69">        return DashboardResponse.builder()</span>
+<span class="nc" id="L70">                .totalDeliveries(total)</span>
+<span class="nc" id="L71">                .totalDelivered(delivered)</span>
+<span class="nc" id="L72">                .totalFailed(failed)</span>
+<span class="nc" id="L73">                .totalDelayed(delayed)</span>
+<span class="nc" id="L74">                .totalPending(pending)</span>
+<span class="nc" id="L75">                .unresolvedExceptions(unresolved)</span>
+<span class="nc" id="L76">                .totalHubs(totalHubs)</span>
+<span class="nc" id="L77">                .build();</span>
+    }
+    // ================= EXCEPTION =================
+    @Override
+    @Transactional
+    public ExceptionLog resolveException(Long exceptionId, ExceptionResolutionRequest req, Long adminId) {
+<span class="nc" id="L83">        ExceptionLog exceptionLog = exceptionLogRepository.findById(exceptionId)</span>
+<span class="nc" id="L84">                .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Exception log not found: &quot; + exceptionId));</span>
+
+<span class="nc" id="L86">        exceptionLog.setResolvedBy(adminId);</span>
+<span class="nc" id="L87">        exceptionLog.setResolvedAt(LocalDateTime.now());</span>
+<span class="nc" id="L88">        exceptionLog.setResolution(req.getResolution());</span>
+
+<span class="nc" id="L90">        log.info(&quot;Exception {} resolved by admin {}&quot;, exceptionId, adminId);</span>
+
+<span class="nc" id="L92">        return exceptionLogRepository.save(exceptionLog);</span>
+    }
+
+    // ================= REPORT =================
+    @Override
+    public List&lt;ReportDTO&gt; getReports() {
+<span class="nc" id="L98">        return reportRepository.findAll().stream()</span>
+<span class="nc" id="L99">                .map(r -&gt; modelMapper.map(r, ReportDTO.class))</span>
+<span class="nc" id="L100">                .collect(Collectors.toList());</span>
+    }
+
+    @Override
+    @Transactional
+    public ReportDTO generateReport() {
+
+
+<span class="nc" id="L108">        DashboardResponse dashboard = getDashboard();</span>
+
+<span class="nc" id="L110">        Report report = Report.builder()</span>
+<span class="nc" id="L111">                .reportType(&quot;DAILY&quot;)</span>
+<span class="nc" id="L112">                .reportDate(LocalDate.now())</span>
+<span class="nc" id="L113">                .totalDeliveries(dashboard.getTotalDeliveries())</span>
+<span class="nc" id="L114">                .delivered(dashboard.getTotalDelivered())</span>
+<span class="nc" id="L115">                .failed(dashboard.getTotalFailed())</span>
+<span class="nc" id="L116">                .pending(dashboard.getTotalPending())</span>
+<span class="nc" id="L117">                .build();</span>
+
+<span class="nc" id="L119">        Report saved = reportRepository.save(report);</span>
+
+<span class="nc" id="L121">        log.info(&quot;Daily report generated for date: {}&quot;, LocalDate.now());</span>
+
+<span class="nc" id="L123">        return modelMapper.map(saved, ReportDTO.class);</span>
+    }
+
+    // ================= HUB =================
+    @Override
+    public List&lt;Hub&gt; getAllHubs() {
+<span class="nc" id="L129">        return hubRepository.findByIsActiveTrue();</span>
+    }
+
+    @Override
+    @Transactional
+    public Hub createHub(HubRequest req) {
+<span class="nc" id="L135">        Hub hub = modelMapper.map(req, Hub.class);</span>
+<span class="nc" id="L136">        hub.setIsActive(true);</span>
+<span class="nc" id="L137">        return hubRepository.save(hub);</span>
+    }
+
+    @Override
+    @Transactional
+    public Hub updateHub(Long id, HubRequest req) {
+<span class="nc" id="L143">        Hub hub = hubRepository.findById(id)</span>
+<span class="nc" id="L144">                .orElseThrow(() -&gt; new ResourceNotFoundException(&quot;Hub not found: &quot; + id));</span>
+
+<span class="nc" id="L146">        modelMapper.map(req, hub);</span>
+<span class="nc" id="L147">        return hubRepository.save(hub);</span>
+    }
+
+
+    @Override
+    @Transactional
+    public ExceptionLog createException(ExceptionCreateRequest req) {
+
+<span class="nc" id="L155">        ExceptionLog log = ExceptionLog.builder()</span>
+<span class="nc" id="L156">                .deliveryId(req.getDeliveryId())</span>
+<span class="nc" id="L157">                .exceptionType(req.getExceptionType())</span>
+<span class="nc" id="L158">                .reason(req.getReason())</span>
+<span class="nc" id="L159">                .createdAt(LocalDateTime.now())</span>
+<span class="nc" id="L160">                .resolvedAt(null)</span>
+<span class="nc" id="L161">                .resolvedBy(null)</span>
+<span class="nc" id="L162">                .build();</span>
+
+<span class="nc" id="L164">        return exceptionLogRepository.save(log);</span>
+    }
+
+    @Override
+    public List&lt;ExceptionLogDTO&gt; getAllExceptions() {
+<span class="nc" id="L169">        return exceptionLogRepository.findAll().stream().map(e -&gt; {</span>
+<span class="nc" id="L170">            ExceptionLogDTO dto = new ExceptionLogDTO();</span>
+
+<span class="nc" id="L172">            dto.setId(e.getId());</span>
+<span class="nc" id="L173">            dto.setDeliveryId(e.getDeliveryId());</span>
+<span class="nc" id="L174">            dto.setExceptionType(e.getExceptionType());</span>
+<span class="nc" id="L175">            dto.setReason(e.getReason());</span>
+<span class="nc" id="L176">            dto.setResolution(e.getResolution());</span>
+<span class="nc" id="L177">            dto.setCreatedAt(e.getCreatedAt());</span>
+<span class="nc" id="L178">            dto.setResolvedAt(e.getResolvedAt());</span>
+<span class="nc" id="L179">            dto.setResolvedBy(e.getResolvedBy());</span>
+
+<span class="nc" id="L181">            return dto;</span>
+<span class="nc" id="L182">        }).toList();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

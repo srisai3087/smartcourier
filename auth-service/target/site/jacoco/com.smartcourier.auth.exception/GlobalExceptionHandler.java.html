@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GlobalExceptionHandler.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">Auth Service</a> &gt; <a href="index.source.html" class="el_package">com.smartcourier.auth.exception</a> &gt; <span class="el_source">GlobalExceptionHandler.java</span></div><h1>GlobalExceptionHandler.java</h1><pre class="source lang-java linenums">package com.smartcourier.auth.exception;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.WebRequest;
+
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
+
+@RestControllerAdvice
+<span class="nc" id="L17">public class GlobalExceptionHandler {</span>
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleNotFound(
+            ResourceNotFoundException ex, WebRequest request) {
+
+<span class="nc" id="L23">        ErrorResponse error = ErrorResponse.builder()</span>
+<span class="nc" id="L24">                .timestamp(LocalDateTime.now())</span>
+<span class="nc" id="L25">                .status(404)</span>
+<span class="nc" id="L26">                .error(&quot;Not Found&quot;)</span>
+<span class="nc" id="L27">                .message(ex.getMessage())</span>
+<span class="nc" id="L28">                .path(request.getDescription(false).replace(&quot;uri=&quot;, &quot;&quot;))</span>
+<span class="nc" id="L29">                .build();</span>
+
+<span class="nc" id="L31">        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);</span>
+    }
+
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleBadCredentials(
+            BadCredentialsException ex, WebRequest request) {
+
+<span class="nc" id="L38">        ErrorResponse error = ErrorResponse.builder()</span>
+<span class="nc" id="L39">                .timestamp(LocalDateTime.now())</span>
+<span class="nc" id="L40">                .status(401)</span>
+<span class="nc" id="L41">                .error(&quot;Unauthorized&quot;)</span>
+<span class="nc" id="L42">                .message(ex.getMessage())</span>
+<span class="nc" id="L43">                .path(request.getDescription(false).replace(&quot;uri=&quot;, &quot;&quot;))</span>
+<span class="nc" id="L44">                .build();</span>
+
+<span class="nc" id="L46">        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);</span>
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleIllegalArgument(
+            IllegalArgumentException ex, WebRequest request) {
+
+<span class="nc" id="L53">        ErrorResponse error = ErrorResponse.builder()</span>
+<span class="nc" id="L54">                .timestamp(LocalDateTime.now())</span>
+<span class="nc" id="L55">                .status(400)</span>
+<span class="nc" id="L56">                .error(&quot;Bad Request&quot;)</span>
+<span class="nc" id="L57">                .message(ex.getMessage())</span>
+<span class="nc" id="L58">                .path(request.getDescription(false).replace(&quot;uri=&quot;, &quot;&quot;))</span>
+<span class="nc" id="L59">                .build();</span>
+
+<span class="nc" id="L61">        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);</span>
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity&lt;Map&lt;String, Object&gt;&gt; handleValidationErrors(
+            MethodArgumentNotValidException ex) {
+
+<span class="nc" id="L68">        Map&lt;String, String&gt; fieldErrors = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L69">        ex.getBindingResult().getAllErrors().forEach(err -&gt; {</span>
+<span class="nc" id="L70">            String field = ((FieldError) err).getField();</span>
+<span class="nc" id="L71">            String message = err.getDefaultMessage();</span>
+<span class="nc" id="L72">            fieldErrors.put(field, message);</span>
+<span class="nc" id="L73">        });</span>
+
+<span class="nc" id="L75">        Map&lt;String, Object&gt; response = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L76">        response.put(&quot;timestamp&quot;, LocalDateTime.now().toString());</span>
+<span class="nc" id="L77">        response.put(&quot;status&quot;, 400);</span>
+<span class="nc" id="L78">        response.put(&quot;error&quot;, &quot;Validation Failed&quot;);</span>
+<span class="nc" id="L79">        response.put(&quot;errors&quot;, fieldErrors);</span>
+
+<span class="nc" id="L81">        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);</span>
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleGeneral(Exception ex, WebRequest request) {
+<span class="nc" id="L86">        ErrorResponse error = ErrorResponse.builder()</span>
+<span class="nc" id="L87">                .timestamp(LocalDateTime.now())</span>
+<span class="nc" id="L88">                .status(500)</span>
+<span class="nc" id="L89">                .error(&quot;Internal Server Error&quot;)</span>
+<span class="nc" id="L90">                .message(&quot;An unexpected error occurred. Please try again.&quot;)</span>
+<span class="nc" id="L91">                .path(request.getDescription(false).replace(&quot;uri=&quot;, &quot;&quot;))</span>
+<span class="nc" id="L92">                .build();</span>
+
+<span class="nc" id="L94">        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>

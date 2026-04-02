@@ -1,0 +1,62 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: delivery-service
+  datasource:
+    url: jdbc:mysql://localhost:3306/delivery_db?createDatabaseIfNotExist=true&useSSL=false&serverTimezone=UTC
+    username: root
+    password: Sai@2003
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+        format_sql: true
+  cloud:
+    loadbalancer:
+      configurations: default
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+
+delivery:
+  charges:
+    domestic-rate: 50
+    express-rate: 100
+    international-rate: 250
+    min-domestic: 100
+    min-express: 200
+    min-international: 500
+    dim-divisor: 5000
+
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+
+logging:
+  level:
+    com.smartcourier.delivery: DEBUG
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://localhost:9411/api/v2/spans
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui.tryItOutEnabled: true

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GlobalExceptionHandler.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">delivery-service</a> &gt; <a href="index.source.html" class="el_package">com.smartcourier.delivery.exception</a> &gt; <span class="el_source">GlobalExceptionHandler.java</span></div><h1>GlobalExceptionHandler.java</h1><pre class="source lang-java linenums">package com.smartcourier.delivery.exception;
+import org.springframework.http.*;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.context.request.WebRequest;
+import java.time.LocalDateTime;
+import java.util.*;
+
+@RestControllerAdvice
+<span class="nc" id="L12">public class GlobalExceptionHandler {</span>
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleNotFound(ResourceNotFoundException ex, WebRequest req) {
+<span class="nc" id="L15">        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(build(404, &quot;Not Found&quot;, ex.getMessage(), req));</span>
+    }
+    @ExceptionHandler(InvalidStatusTransitionException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleTransition(InvalidStatusTransitionException ex, WebRequest req) {
+<span class="nc" id="L19">        return ResponseEntity.status(422).body(build(422, &quot;Unprocessable Entity&quot;, ex.getMessage(), req));</span>
+    }
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity&lt;Map&lt;String,Object&gt;&gt; handleValidation(MethodArgumentNotValidException ex) {
+<span class="nc" id="L23">        Map&lt;String,String&gt; fields = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L24">        ex.getBindingResult().getAllErrors().forEach(e -&gt; fields.put(((FieldError)e).getField(), e.getDefaultMessage()));</span>
+<span class="nc" id="L25">        return ResponseEntity.badRequest().body(Map.of(&quot;status&quot;,400,&quot;error&quot;,&quot;Validation Failed&quot;,&quot;errors&quot;,fields));</span>
+    }
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleGeneral(Exception ex, WebRequest req) {
+<span class="nc" id="L29">        return ResponseEntity.status(500).body(build(500, &quot;Internal Server Error&quot;, &quot;Unexpected error occurred.&quot;, req));</span>
+    }
+    private ErrorResponse build(int status, String error, String msg, WebRequest req) {
+<span class="nc" id="L32">        return ErrorResponse.builder().timestamp(LocalDateTime.now()).status(status)</span>
+<span class="nc" id="L33">            .error(error).message(msg).path(req.getDescription(false).replace(&quot;uri=&quot;,&quot;&quot;)).build();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.11.202310140853</span></div></body></html>
